@@ -11,3 +11,6 @@ build:
 leaks:
     cd wasm-leaks && cargo build
     valgrind wasm-leaks/target/debug/wasm-leaks
+
+serve:
+    cd www && python serve.py
