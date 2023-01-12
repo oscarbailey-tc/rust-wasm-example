@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<script type="module">
+  // Copy `data` into the `instance` exported memory buffer.
+  function newArray(data, instance) {
+    var ptr = instance.exports.wasm_alloc(data.length);
+    var mem = new Uint8Array(instance.exports.memory.buffer, ptr, data.length);
+    mem.set(new Uint8Array(data));
+    return ptr;
+  }
+
+  function newInt(value, instance) {
+    const ptr = instance.exports.wasm_alloc(4);
+    const mem = new Uint8Array(instance.exports.memory.buffer, ptr, 4);
+    for (let i=0; i<4; i++) {
+        mem[i] = (value >> (8*i)) & 0xff;
+    }
+    return ptr;
+  }
+
+  function readInt(ptr, instance) {
+    const mem = new Uint8Array(instance.exports.memory.buffer, ptr, 4);
+    let value = 0;
+    for (let i=0; i<4; i++) {
+        value += (mem[i] << (8*i));
+    }
+    return value;
+  }
+
+  function readByte(ptr, instance) {
+    const mem = new Uint8Array(instance.exports.memory.buffer, ptr, 1);
+    return mem[0];
+  }
+
+  // Read a string from the instance's memory.
+  function readString(ptr, len, instance) {
+    var m = new Uint8Array(instance.exports.memory.buffer, ptr, len);
+    var decoder = new TextDecoder("utf-8");
+    // return a slice of size `len` from the module's
+    // memory, starting at offset `ptr`
+    return decoder.decode(m.slice(0, len));
+  }
+
+  function execFunction(instance, functionName, args) {
+    const json_str = JSON.stringify(args)
+    const data = new Uint8Array(json_str.length)
+    for (let i=0; i<json_str.length; i++) {
+      data[i] = json_str.charCodeAt(i);
+    }
+    var args_ptr = newArray(data, instance);
+    let ret_size_ptr = newInt(0, instance);
+
+    // Call the function
+    var res_ptr = instance.exports[functionName](args_ptr, data.length, ret_size_ptr);
+    let ret_size = readInt(ret_size_ptr, instance);
+    let res = readString(res_ptr, ret_size, instance);
+
+    instance.exports.wasm_dealloc(ret_size_ptr, 4);
+    instance.exports.wasm_dealloc(res_ptr, ret_size);
+
+    console.log("ret size: " + ret_size);
+    console.log("Result: " + res);
+  }
+
+  async function init() {
+
+    const { module, instance } = await WebAssembly.instantiateStreaming(
+      fetch("http://localhost:8887/lib.wasm")
+    );
+
+    console.log(WebAssembly.Module.exports(module))
+
+    execFunction(instance, "json_call", {hey: "hellooo", wow: "wowweee"})
+  }
+
+  init();
+</script>
